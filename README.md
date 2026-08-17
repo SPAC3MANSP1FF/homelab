@@ -141,20 +141,6 @@ Run a real backup only after reviewing the dry-run output:
 
 Logs are written to `/var/log/homelab`. The backup script must be able to create that directory and write to it.
 
-## Plex Migration
-
-[`scripts/plex_migrate.sh`](scripts/plex_migrate.sh) copies an existing Plex library from another server into the configured Docker app-data directory. It excludes caches, logs, indexes, diagnostics, and other regenerable files.
-
-Configure the source SSH user, source server address, old Plex library path, and local destination in `.config/plex_migrate.env`:
-
-```bash
-cd scripts
-cp .config/plex_migrate.env.example .config/plex_migrate.env
-chmod 600 .config/plex_migrate.env
-sudo ./plex_migrate.sh
-```
-
-Review the paths and SSH permissions before running the migration. The script uses `sudo` locally and expects the remote account to be able to run `rsync` with `sudo`.
 
 ## MagicMirror Kiosk
 
