@@ -1,89 +1,81 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# --- Load Configuration ---
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-CONFIG_FILE="$SCRIPT_DIR/.config/backup.env"
+# Exit immediately if a command fails
+set -e
+
+# --- Parse Flags ---
+DRY_RUN=false
+RSYNC_DRY_FLAG=""
+
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|-n)
+            DRY_RUN=true
+            RSYNC_DRY_FLAG="--dry-run"
+            shift
+            ;;
+    esac
+done
+
+# Helper function to execute or echo container lifecycle commands
+run_cmd() {
+    if [ "$DRY_RUN" = true ]; then
+        echo "[DRY-RUN] $*"
+    else
+        "$@"
+    fi
+}
+
+# --- Environment Configuration ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/.config/backup.env"
+
 if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
     source "$CONFIG_FILE"
 else
-    echo "❌ Error: Configuration file $CONFIG_FILE not found."
+    echo "[ERROR] Configuration file not found at ${CONFIG_FILE}"
     exit 1
 fi
 
-# Convert comma-separated strings to arrays
-IFS=',' read -r -a HOME_SOURCES_ARRAY <<< "$HOME_SOURCES"
-IFS=',' read -r -a MEDIA_FOLDERS_ARRAY <<< "$MEDIA_FOLDERS"
+IFS=' ' read -r -a DOCKER_DIRS <<< "${DOCKER_STACK_DIRS:-$HOME/homelab/docker-apps $HOME/medialab/docker-apps}"
 
-# --- Handle Flags & Logging ---
-DRY_RUN_FLAG=""
-[[ "$1" == "--dry-run" ]] && DRY_RUN_FLAG="--dry-run"
-
-# Use a static path since $HOME might be unpredictable in cron
-LOG_DIR="/var/log/homelab"
-mkdir -p "$LOG_DIR"
-TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
-LOG_FILE="$LOG_DIR/${TIMESTAMP}_$(basename "$0" .sh).log"
-
-exec > >(tee -a "$LOG_FILE") 2>&1
-
-# --- Execution ---
-if [ -n "$DRY_RUN_FLAG" ]; then
-    echo "⚠️  DRY RUN MODE ENABLED."
+echo "=================================================="
+if [ "$DRY_RUN" = true ]; then
+    echo " Starting Multi-Stack Offsite Backup Process (DRY RUN)"
+else
+    echo " Starting Multi-Stack Offsite Backup Process"
 fi
+echo " Date: $(date)"
+echo "=================================================="
 
-# Connection Check
-if ! ping -c 1 -W 2 "$REMOTE_HOST" &> /dev/null; then
-    echo "❌ Error: Cannot reach $REMOTE_HOST."
-    exit 1
-fi
-
-# Part 1: Home Folders
-echo -e "\n📂 [Part 1] Backing up Home Folders..."
-for SRC in "${HOME_SOURCES_ARRAY[@]}"; do
-    if [ -d "$SRC" ]; then
-        rsync $DRY_RUN_FLAG -avh --progress -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
-            --rsync-path="mkdir -p $HOME_DEST && rsync" \
-            "$SRC" "$REMOTE_USER@$REMOTE_HOST:$HOME_DEST/"
+# --- 1. Safely Stop Databases Before Sync ---
+echo "[INFO] Pausing database services across stacks for consistent state..."
+for COMPOSE_DIR in "${DOCKER_DIRS[@]}"; do
+    if [ -f "${COMPOSE_DIR}/compose.yaml" ]; then
+        echo "[INFO] Checking databases in ${COMPOSE_DIR}..."
+        run_cmd docker compose -f "${COMPOSE_DIR}/compose.yaml" stop lamp-db nextcloud-db 2>/dev/null || true
     fi
 done
 
-# Part 2: Media Folders
-echo -e "\n🎬 [Part 2] Backing up Mixed Media..."
-for FOLDER in "${MEDIA_FOLDERS_ARRAY[@]}"; do
-    SRC_PATH="$MEDIA_BASE/$FOLDER"
+# --- 2. Execute Offsite Backup via Rsync ---
+echo "[INFO] Executing offsite rsync transfer..."
+if [ -d "${DOCKER_APPDATA_PATH:-/var/lib/docker/appdata}" ]; then
+    echo "[INFO] Syncing Appdata -> ${REMOTE_HOST}:${DOCKER_BACKUP_DEST}..."
+    rsync -avz ${RSYNC_DRY_FLAG} --delete \
+        -e "ssh -p ${REMOTE_SSH_PORT:-22} -i ${SSH_KEY_PATH}" \
+        "${DOCKER_APPDATA_PATH}/" \
+        "${REMOTE_USER}@${REMOTE_HOST}:${DOCKER_BACKUP_DEST}/"
+fi
 
-    if [ -d "$SRC_PATH" ]; then
-        echo -e "\n🔄 Processing Media: $FOLDER..."
-
-        rsync $DRY_RUN_FLAG -avh --progress \
-            --usermap="*:$BACKUP_USER" \
-            --groupmap="*:$BACKUP_GROUP" \
-            --numeric-ids \
-            -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" "$SRC_PATH" "$REMOTE_USER@$REMOTE_HOST:$MEDIA_DEST/"
-
-        echo "✅ Finished: $FOLDER"
-    else
-        echo "⚠️  Warning: $SRC_PATH does not exist, skipping."
+# --- 3. Restart Database Services ---
+echo "[INFO] Restarting database services..."
+for COMPOSE_DIR in "${DOCKER_DIRS[@]}"; do
+    if [ -f "${COMPOSE_DIR}/compose.yaml" ]; then
+        run_cmd docker compose -f "${COMPOSE_DIR}/compose.yaml" start lamp-db nextcloud-db 2>/dev/null || true
     fi
 done
 
-# --- Part 3: Docker AppData Backup ---
-echo -e "\n🐳 [Part 3] Backing up Docker AppData..."
-
-# 1. Stop containers to ensure database consistency
-echo "🛑 Stopping containers..."
-docker compose -f "$DOCKER_COMPOSE_YAML" down --timeout 5
-
-# 2. Sync the data
-rsync $DRY_RUN_FLAG -avh --progress \
-    -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=no" \
-    "$DOCKER_APPDATA_PATH" "$REMOTE_USER@$REMOTE_HOST:$DOCKER_BACKUP_DEST/"
-
-# 3. Start containers back up
-echo "🚀 Restarting containers..."
-docker compose -f "$DOCKER_COMPOSE_YAML" up -d
-
-echo "✅ Finished: Docker AppData"
-
-
-echo -e "\n🎉 Process complete!"
+echo "=================================================="
+echo " Backup Process Completed!"
+echo "=================================================="

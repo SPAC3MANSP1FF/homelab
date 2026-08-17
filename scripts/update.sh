@@ -1,90 +1,68 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-# Exit immediately if any command fails
+# Exit immediately if a command exits with a non-zero status
 set -e
 
-# --- LOAD CONFIGURATION ---
-SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-CONFIG_FILE="$SCRIPT_DIR/.config/update.env"
+# --- Environment Configuration ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/.config/update.env"
 
+# Load local configuration environment variables
 if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
     source "$CONFIG_FILE"
 else
-    echo "❌ Error: Configuration file not found at $CONFIG_FILE"
+    echo "[ERROR] Configuration file not found at ${CONFIG_FILE}"
     exit 1
 fi
 
-# --- Logging Setup ---
-# Use a static path since $HOME might be unpredictable in cron
-LOG_DIR="/var/log/homelab"
-mkdir -p "${LOG_DIR}"
-TIMESTAMP=$(date +"%Y-%m-%d_%H%M%S")
-LOG_FILE="$LOG_DIR/${TIMESTAMP}_$(basename "$0" .sh).log"
+# Set default stack directories if not defined in update.env
+STACK_PATHS=("${HOMELAB_DIR:-$HOME/homelab}" "${MEDIALAB_DIR:-$HOME/medialab}")
 
-exec > >(tee -a "$LOG_FILE") 2>&1
+echo "=================================================="
+echo " Starting System & Multi-Stack Update Process"
+echo " Date: $(date)"
+echo "=================================================="
 
+# --- 1. System Package Updates ---
+echo "[INFO] Updating system packages..."
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt-get autoremove -y && sudo apt-get autoclean
 
-# Ensure the script is being run with sudo
-if [ "$EUID" -ne 0 ]; then
-  echo "❌ Error: This script must be run with sudo (e.g., sudo ./update.sh)"
-  exit 1
-fi
+# --- 2. Update Repositories & Stacks ---
+for STACK_PATH in "${STACK_PATHS[@]}"; do
+    STACK_NAME="$(basename "$STACK_PATH")"
+    COMPOSE_DIR="${STACK_PATH}/docker-apps"
 
-echo "=============================================="
-echo "📦 PHASE 1: Ubuntu OS System Maintenance"
-echo "=============================================="
+    if [ -d "$STACK_PATH" ]; then
+        echo "--------------------------------------------------"
+        echo "[INFO] Processing stack: ${STACK_NAME}"
+        echo "--------------------------------------------------"
 
-echo "📥 Fetching latest package lists..."
-apt-get update
+        # Git Pull
+        echo "[INFO] Pulling latest repository changes for ${STACK_NAME}..."
+        git -C "$STACK_PATH" pull origin main
 
-echo "🚀 Upgrading Ubuntu system packages..."
-apt-get dist-upgrade -y
+        # Docker Compose Operations
+        if [ -d "$COMPOSE_DIR" ]; then
+            echo "[INFO] Pulling container images for ${STACK_NAME}..."
+            docker compose -f "${COMPOSE_DIR}/compose.yaml" pull
 
-echo "🧹 Cleaning up old kernels and orphaned packages..."
-apt-get autoremove -y
+            echo "[INFO] Deploying updated containers for ${STACK_NAME}..."
+            docker compose -f "${COMPOSE_DIR}/compose.yaml" up -d
+        else
+            echo "[WARN] Docker Compose directory missing for ${STACK_NAME}: ${COMPOSE_DIR}"
+        fi
+    else
+        echo "[WARN] Stack path does not exist: ${STACK_PATH}"
+    fi
+done
 
-echo "🗑️ Clearing local repository of retrieved package files..."
-apt-get autoclean
-
-echo ""
-echo "=============================================="
-echo "🐳 PHASE 2: Docker Media Stack Maintenance"
-echo "=============================================="
-
-# Navigate to your Docker Compose directory
-cd "$DOCKER_DIR"
-
-echo "📥 Checking for new Docker image updates..."
-docker compose pull
-
-echo "🔄 Recreating containers (respecting pinned versions)..."
-docker compose up -d
-
-echo "🧹 Cleaning up old, dangling Docker images..."
+# --- 3. Docker Cleanup ---
+echo "--------------------------------------------------"
+echo "[INFO] Pruning unused Docker images and build caches..."
 docker image prune -f
 
-# --- Auto-Update Script from Git ---
-echo ""
-echo "=============================================="
-echo "🐙 PHASE 3: Script Updates"
-echo "=============================================="
-
-# Navigate to the repo using the variable from .env
-cd "$REPO_DIR"
-
-# Run git pull using the specific SSH key defined in .config/update.env
-# We use sudo -E to keep the environment, but force the key explicitly
-export GIT_SSH_COMMAND="ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=accept-new"
-
-git pull origin main
-
-if [ $? -eq 0 ]; then
-    echo "✅ Scripts are up to date."
-else
-    echo "⚠️  Warning: Could not pull updates from Git. Please check your network/repo status."
-fi
-
-echo ""
-echo "=============================================="
-echo "✅ SUCCESS: System, scripts, and containers are fully updated!"
-echo "=============================================="
+echo "=================================================="
+echo " Update Process Completed Successfully!"
+echo "=================================================="
