@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 
-# Exit immediately if a command exits with a non-zero status
 set -e
 
 # --- Environment Configuration ---
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Get the true canonical directory of this script, even through symlinks or sudo
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/.config/update.env"
 
-# Load local configuration environment variables
 if [ -f "$CONFIG_FILE" ]; then
     # shellcheck disable=SC1090
     source "$CONFIG_FILE"
