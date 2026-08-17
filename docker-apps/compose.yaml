@@ -1,0 +1,168 @@
+services:
+  pihole:
+    container_name: pihole
+    hostname: ${PIHOLE_HOSTNAME}
+    image: pihole/pihole:latest
+    ports:
+      - 53:53/tcp
+      - 53:53/udp
+    environment:
+      TZ: ${TZ}
+      FTLCONF_webserver_api_password: ${PIHOLE_PASSWORD}
+      VIRTUAL_HOST: ${PIHOLE_VIRTUAL_HOST}
+    volumes:
+      - ./pihole/etc-pihole:/etc/pihole
+      - ./pihole/etc-dnsmasq.d:/etc/dnsmasq.d
+    networks:
+      - proxy-tier
+    restart: unless-stopped
+
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
+    restart: unless-stopped
+    ports:
+      - 80:80
+      - 443:443
+      - 81:81
+    volumes:
+      - ./npm/data:/data
+      - ./npm/letsencrypt:/etc/letsencrypt
+    networks:
+      - proxy-tier
+
+  lamp-db:
+    image: mariadb:11.4
+    container_name: lamp-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-lampdb}
+      MYSQL_USER: ${MYSQL_USER:-lampuser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - ./lamp-db-data:/var/lib/mysql
+    ports:
+      - 3306:3306
+    networks:
+      - proxy-tier
+
+  lamp-web:
+    image: php:8.4-apache
+    container_name: lamp-web
+    restart: unless-stopped
+    depends_on:
+      lamp-db:
+        condition: service_started
+        required: true
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./html:/var/www/html
+    ports:
+      - 8080:80
+    networks:
+      - proxy-tier
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: phpmyadmin
+    restart: unless-stopped
+    depends_on:
+      lamp-db:
+        condition: service_started
+        required: true
+    environment:
+      PMA_HOST: lamp-db
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-lamproot}
+    ports:
+      - 8081:80
+    networks:
+      - proxy-tier
+
+  nextcloud-db:
+    image: mariadb:10.11
+    container_name: nextcloud-db
+    restart: unless-stopped
+    command:
+      - --transaction-isolation=READ-COMMITTED
+      - --log-bin=binlog
+      - --binlog-format=ROW
+    volumes:
+      - ${PATH_NEXTCLOUD_DB}:${CONT_NEXTCLOUD_DB}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+    networks:
+      - proxy-tier
+
+  nextcloud-app:
+    image: nextcloud:latest
+    container_name: nextcloud-app
+    restart: unless-stopped
+    depends_on:
+      nextcloud-db:
+        condition: service_started
+        required: true
+    volumes:
+      - ${PATH_NEXTCLOUD_APP}:${CONT_NEXTCLOUD_APP}
+      - ${PATH_NEXTCLOUD_MOBILE_USER1_PHOTOS}:${CONT_NEXTCLOUD_USER1_PHOTOS}
+      - ${PATH_NEXTCLOUD_MOBILE_USER2_PHOTOS}:${CONT_NEXTCLOUD_USER2_PHOTOS}
+    environment:
+      MYSQL_HOST: nextcloud-db
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+    networks:
+      - proxy-tier
+
+  cloudflared:
+     image: cloudflare/cloudflared:latest
+     container_name: cloudflared
+     restart: unless-stopped
+     command: tunnel run
+     environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+     networks:
+      - proxy-tier
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    hostname: ${TS_HOSTNAME}
+    environment:
+      TS_AUTHKEY: ${TS_AUTH_KEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_EXTRA_ARGS: --advertise-routes=${TS_ROUTES} --accept-dns=false
+    volumes:
+      - ./tailscale/state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    restart: unless-stopped
+    networks:
+      - proxy-tier    
+
+  magicmirror:
+    image: karsten13/magicmirror:latest
+    container_name: magicmirror
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      MM_SCENARIO: server
+    volumes:
+      - ${PATH_MAGICMIRROR_CONFIG}:${CONT_MAGICMIRROR_CONFIG}
+      - ${PATH_MAGICMIRROR_MODULES}:${CONT_MAGICMIRROR_MODULES}
+      - ${PATH_NEXTCLOUD_WALLPAPERS}:${CONT_MAGICMIRROR_WALLPAPERS}:ro
+    ports:
+      - 8090:8080
+    networks:
+      - proxy-tier
+
+networks:
+  proxy-tier:
+    external: true

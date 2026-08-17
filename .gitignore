@@ -1,0 +1,19 @@
+# 1. Global Ignore Rules
+*.key
+*.pem
+
+# 2. Prevent accidental tracking of secret files
+*.env
+.env
+**/.env
+
+# 3. Handle the DOCKER-APPS folder specifically
+# Ignore everything first
+/docker-apps/*
+
+# Then, explicitly ALLOW the files we want to track
+#.example files are allowed as they're used for configuration templates
+#.md files are allowed as they're used for documentation
+!/docker-apps/compose.yaml
+!/docker-apps/**/*.example
+!/docker-apps/**/*.md
