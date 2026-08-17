@@ -1,12 +1,12 @@
 # Homelab
 
-Docker-based homelab configuration for a self-hosted cloud, networking, and utility server. The main application stack lives in [`docker-apps/compose.yaml`](docker-apps/compose.yaml); the shell scripts in [`scripts/`](scripts/) handle maintenance, backups, and Plex migration.
+Docker-based homelab configuration for a self-hosted cloud, networking, and utility server. The main application stack lives in [`docker-apps/compose.yaml`](docker-apps/compose.yaml); the shell scripts in [`scripts/`](scripts/) handle maintenance and backups.
 
 This repository contains configuration and operational documentation, not application data. Secrets, database files, media libraries, and persistent container data should remain outside Git.
 
 The stack was developed and tested on an Ubuntu Server `26.04` host, with this repository checked out in my home directory. The Compose stack itself is not tied to that checkout location: clone it elsewhere, run Compose from `docker-apps/`, and update the absolute host paths in `.env`. The maintenance scripts also require their configured `DOCKER_DIR` and `REPO_DIR` values to point to the new locations.
 
-The default examples use `/var/lib/docker/appdata` for persistent application data. This is a convention rather than a requirement, except for the hard-coded ownership cleanup path in `scripts/plex_migrate.sh`; change that script if Plex app data is stored elsewhere.
+The default examples use `/var/lib/docker/appdata` for persistent application data. This is a convention rather than a requirement.
 
 ## Services
 
