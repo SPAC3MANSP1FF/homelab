@@ -1,12 +1,12 @@
 # Building a Self-Hosted Homelab with Docker and Ubuntu
 
-A step-by-step guide to deploying, configuring, and maintaining a self-hosted homelab stack for cloud storage, ad blocking, local web development, and secure remote networking.
+A step-by-step guide to deploying, configuring, and maintaining a self-hosted homelab stack for cloud storage, ad blocking, local web development, database administration, and secure remote networking.
 
 ---
 
 ## Overview & Architecture
 
-This guide walks through setting up a modular Docker-based homelab on an Ubuntu Server. By using Docker Compose and an external proxy network, services can securely communicate with each other while exposing only the necessary endpoints to your local network or VPN.
+This guide walks through setting up a modular Docker-based homelab on an Ubuntu Server host. By using Docker Compose and an external proxy network, services can securely communicate with each other while exposing only the necessary endpoints to your local network, your VPN, or the public internet.
 
 ```text
                                  ┌────────────────────────┐
@@ -25,6 +25,8 @@ This guide walks through setting up a modular Docker-based homelab on an Ubuntu 
 │ Cloud Store│     │ DNS Filter │     │ Apache/PHP │     │ Database UI  │    │ Mesh VPN   │
 └────────────┘     └────────────┘     └────────────┘     └──────────────┘    └────────────┘
 ```
+
+Nothing above is exposed to the open internet unless it needs to be. Cloudflare Tunnel and Tailscale handle inbound access from outside the LAN; everything else stays behind `proxy-tier` and is reachable only locally or over VPN.
 
 ---
 
@@ -66,6 +68,8 @@ git clone https://github.com/SPAC3MANSP1FF/homelab.git ~/homelab
 # Navigate to the compose directory
 cd ~/homelab/docker-apps
 ```
+
+The Compose stack isn't tied to this checkout path — clone it wherever suits you and adjust the absolute paths in `.env` accordingly.
 
 ---
 
@@ -138,10 +142,17 @@ sudo ./backup.sh --dry-run
 
 Once deployed, access local administrative dashboards using your host's LAN IP address:
 
-| Service | Local URL / Access | Description |
-| :--- | :--- | :--- |
-| **Nginx Proxy Manager** | `http://<host-ip>:81` | Reverse proxy and SSL certificate management |
-| **LAMP Web App** | `http://<host-ip>:8080` | Local Apache/PHP development environment |
-| **phpMyAdmin** | `http://<host-ip>:8081` | Database UI for MySQL / MariaDB |
-| **Pi-hole** | `http://<host-ip>/admin` | Network-wide ad blocking and local DNS |
-| **Nextcloud** | Via Proxy / Tunnel | Cloud file storage and synchronization |
+| Service | Container Name | Purpose | Local Port / Access |
+| :--- | :--- | :--- | :--- |
+| **Pi-hole** | `pihole` | DNS filtering and local DNS resolution | `53/tcp`, `53/udp` |
+| **Nginx Proxy Manager** | `nginx-proxy-manager` | Reverse proxy and automated TLS management | `80`, `81`, `443` |
+| **LAMP Web Server** | `lamp-web` | Apache/PHP (`php:8.4-apache`) development environment | `8080` |
+| **LAMP Database** | `lamp-db` | MariaDB instance (`10.11`) backing the LAMP stack | `3306` |
+| **phpMyAdmin** | `phpmyadmin` | Database UI for MySQL / MariaDB | `8081` |
+| **Nextcloud** | `nextcloud-app` | Self-hosted cloud storage & photo sync | Via Reverse Proxy |
+| **Nextcloud Database** | `nextcloud-db` | Dedicated MariaDB backend (`11.4`) | Internal |
+| **Cloudflare Tunnel** | `cloudflared` | Outbound tunnel for public web ingress, no open inbound ports | None |
+| **Tailscale** | `tailscale` | Mesh VPN overlay and subnet routing | None |
+| **MagicMirror²** | `magicmirror` | Server-rendered dashboard display | `8090` |
+
+Most of these join `proxy-tier` so Nginx Proxy Manager and Cloudflare Tunnel can reach them by container name without exposing extra ports to the host.
