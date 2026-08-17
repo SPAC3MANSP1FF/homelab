@@ -1,6 +1,6 @@
 # Homelab
 
-Docker-based homelab configuration for a self-hosted media, cloud, networking, and utility server. The main application stack lives in [`docker-apps/compose.yaml`](docker-apps/compose.yaml); the shell scripts in [`scripts/`](scripts/) handle maintenance, backups, and Plex migration.
+Docker-based homelab configuration for a self-hosted cloud, networking, and utility server. The main application stack lives in [`docker-apps/compose.yaml`](docker-apps/compose.yaml); the shell scripts in [`scripts/`](scripts/) handle maintenance, backups, and Plex migration.
 
 This repository contains configuration and operational documentation, not application data. Secrets, database files, media libraries, and persistent container data should remain outside Git.
 
@@ -16,12 +16,6 @@ The Compose stack currently includes:
 | --- | --- | ---: |
 | Pi-hole | DNS filtering and local DNS | `53/tcp`, `53/udp` |
 | Nginx Proxy Manager | Reverse proxy and TLS management | `80`, `81`, `443` |
-| Plex | Media server | Host networking |
-| qBittorrent | Torrent client | `8085`, `6881/tcp`, `6881/udp` |
-| Sonarr | TV automation | `8989` |
-| Radarr | Movie automation | `7878` |
-| Seerr | Media requests | `5055` |
-| Prowlarr | Indexer management | `9696` |
 | LAMP web/database | PHP/Apache and MariaDB application stack | `8080`, `3306` |
 | phpMyAdmin | MariaDB administration | `8081` |
 | Nextcloud | Personal cloud storage | Through the proxy |
@@ -207,17 +201,12 @@ These are the direct LAN endpoints when the host firewall allows them:
 
 ```text
 http://<host>:81       Nginx Proxy Manager
-http://<host>:8085     qBittorrent
-http://<host>:8989     Sonarr
-http://<host>:7878     Radarr
-http://<host>:5055     Seerr
-http://<host>:9696     Prowlarr
 http://<host>:8080     LAMP web application
 http://<host>:8081     phpMyAdmin
 http://<host>:8090     MagicMirror
 ```
 
-Plex uses host networking and therefore follows the host's Plex discovery and service ports rather than a Compose port mapping. Nextcloud is not directly published by the current Compose file and should be exposed through the reverse proxy or Cloudflare Tunnel.
+Nextcloud is not directly published by the current Compose file and should be exposed through the reverse proxy or Cloudflare Tunnel.
 
 ## Operations
 
