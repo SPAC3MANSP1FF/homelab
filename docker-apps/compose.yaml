@@ -210,7 +210,7 @@ services:
     container_name: orbital-sync
     restart: unless-stopped
     environment:
-      PRIMARY_HOST_BASE_URL: "${PIHOLE_HOST}"
+      PRIMARY_HOST_BASE_URL: "${PIHOLE_HOSTNAME}"
       PRIMARY_HOST_PASSWORD: "${PIHOLE_PASSWORD}"
       SECONDARY_HOST_BASE_URL: "${SECONDARY_PIHOLE_HOSTNAME}"
       SECONDARY_HOST_PASSWORD: "${SECONDARY_PIHOLE_PASSWORD}"
