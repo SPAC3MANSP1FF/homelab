@@ -194,6 +194,81 @@ services:
       TOKEN: ${BESZEL_TOKEN}
       KEY: "${BESZEL_KEY}"
 
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:stable
+    container_name: homeassistant
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+
+  orbital-sync:
+    image: mattwebbio/orbital-sync:latest
+    container_name: orbital-sync
+    restart: unless-stopped
+    environment:
+      PRIMARY_HOST_BASE_URL: "${PIHOLE_HOST}"
+      PRIMARY_HOST_PASSWORD: "${PIHOLE_PASSWORD}"
+      SECONDARY_HOST_BASE_URL: "${SECONDARY_PIHOLE_HOSTNAME}"
+      SECONDARY_HOST_PASSWORD: "${SECONDARY_PIHOLE_PASSWORD}"
+      INTERVAL_MINUTES: "30"
+    networks:
+      - proxy-tier
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - 9000:9000
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer_data:/data
+    networks:
+      - proxy-tier
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_SCHEDULE: "0 0 4 * * *"
+    networks:
+      - proxy-tier
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    ports:
+      - 3000:3000
+    volumes:
+      - ./homepage/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy-tier
+
+  homarr:
+    image: ghcr.io/homarr-labs/homarr:latest
+    container_name: homarr
+    restart: unless-stopped
+    ports:
+      - 7575:7575
+    environment:
+      # Generate a key using: openssl rand -hex 32
+      SECRET_ENCRYPTION_KEY: "${HOMARR_SECRET_ENCRYPTION_KEY}"
+    volumes:
+      - ./homarr/appdata:/appdata
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - proxy-tier
+
 
 networks:
   proxy-tier:
