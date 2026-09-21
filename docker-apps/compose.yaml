@@ -165,11 +165,7 @@ services:
     networks:
       - proxy-tier
 
-networks:
-  proxy-tier:
-    external: true
-
-beszel:
+  beszel:
     image: henrygd/beszel:latest
     container_name: beszel
     restart: unless-stopped
@@ -183,7 +179,7 @@ beszel:
     networks:
       - proxy-tier
 
-beszel-agent:
+  beszel-agent:
     image: henrygd/beszel-agent:latest
     container_name: beszel-agent
     restart: unless-stopped
@@ -197,3 +193,8 @@ beszel-agent:
       HUB_URL: http://localhost:8091
       TOKEN: ${BESZEL_TOKEN}
       KEY: "${BESZEL_KEY}"
+
+
+networks:
+  proxy-tier:
+    external: true
