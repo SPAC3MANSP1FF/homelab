@@ -205,18 +205,19 @@ services:
       - ./homeassistant/config:/config
       - /etc/localtime:/etc/localtime:ro
 
-  orbital-sync:
-    image: mattwebbio/orbital-sync:latest
-    container_name: orbital-sync
+  nebula-sync:
+    image: ghcr.io/lovelaze/nebula-sync:latest
+    container_name: nebula-sync
     restart: unless-stopped
     environment:
-      PRIMARY_HOST_BASE_URL: "${PIHOLE_HOSTNAME}"
-      PRIMARY_HOST_PASSWORD: "${PIHOLE_PASSWORD}"
-      SECONDARY_HOST_BASE_URL: "${SECONDARY_PIHOLE_HOSTNAME}"
-      SECONDARY_HOST_PASSWORD: "${SECONDARY_PIHOLE_PASSWORD}"
-      INTERVAL_MINUTES: "30"
+      PRIMARY: "http://${PIHOLE_HOSTNAME}|${PIHOLE_PASSWORD}"
+      REPLICAS: "http://${SECONDARY_PIHOLE_HOSTNAME}|${SECONDARY_PIHOLE_PASSWORD}"
+      FULL_SYNC: "true"
+      RUN_GRAVITY: "true"
+      CRON: "*/30 * * * *"
     networks:
-      - proxy-tier
+    - proxy-tier
+
 
   portainer:
     image: portainer/portainer-ce:latest
