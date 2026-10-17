@@ -201,9 +201,14 @@ services:
     network_mode: host
     environment:
       TZ: ${TZ}
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     volumes:
       - ./homeassistant/config:/config
       - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+
 
   nebula-sync:
     image: ghcr.io/lovelaze/nebula-sync:latest
